@@ -1,4 +1,5 @@
 use std::collections::LinkedList;
+use std::iter::Map;
 use std::sync::Arc;
 
 use crate::data_source::DataSource;
@@ -47,7 +48,46 @@ impl AddressSpace {
         offset: usize,
         span: usize,
     ) -> Result<VirtualAddress, &str> {
-        todo!()
+        // todo!()
+        let mut start_free = 0;
+        let mut end_free = 2 ^ 39 - 1;
+        let mut iter = self.mappings.iter();
+
+        if iter.is_empty() {
+            let src: Arc<dyn DataSource> = { source };
+            let entry = MapEntry {
+                source: src,
+                offset: offset,
+                span: span,
+                addr: start_free,
+            };
+            self.mappings.push_back(entry);
+            return Ok(entry.addr);
+        }
+
+        loop {
+            if let Some(first_entry) = iter.next() {
+                start_free = first_entry.addr + first_entry.span;
+                if let Some(second_entry) = iter.next() {
+                    end_free = second_entry.addr - 1;
+                } else {
+                    end_free = 2 ^ 39 - 1;
+                }
+            } else {
+                return Err("cannot fit data source in address space");
+            }
+            if end_free - start_free >= span {
+                let src: Arc<dyn DataSource> = { source };
+                let entry = MapEntry {
+                    source: src,
+                    offset: offset,
+                    span: span,
+                    addr: start_free,
+                };
+                self.mappings.push_back(entry);
+                return Ok(entry.addr);
+            }
+        }
     }
 
     /// Add a mapping from `DataSource` into this `AddressSpace` starting at a specific address.
@@ -61,7 +101,48 @@ impl AddressSpace {
         span: usize,
         start: VirtualAddress,
     ) -> Result<(), &str> {
-        todo!()
+        let mut start_free;
+        let mut end_free;
+        let mut iter = self.mappings.iter();
+
+        if iter.is_empty() {
+            let src: Arc<dyn DataSource> = { source };
+            let entry = MapEntry {
+                source: src,
+                offset: offset,
+                span: span,
+                addr: start,
+            };
+            self.mappings.push_back(entry);
+            return Ok(());
+        }
+        loop {
+            if let Some(first_entry) = iter.next() {
+                start_free = first_entry.addr + first_entry.span;
+                if let Some(second_entry) = iter.next() {
+                    end_free = second_entry.addr - 1;
+                } else {
+                    end_free = 2 ^ 39 - 1;
+                }
+            } else {
+                return Err("cannot fit data source in address space");
+            }
+            if start_free <= start && start <= end_free {
+                if start + span <= end_free {
+                    let src: Arc<dyn DataSource> = { source };
+                    let entry = MapEntry {
+                        source: src,
+                        offset: offset,
+                        span: span,
+                        addr: start_free,
+                    };
+                    self.mappings.push_back(entry);
+                    return Ok(());
+                } else {
+                    return Err("cannot fit data source into address space");
+                }
+            }
+        }
     }
 
     /// Remove the mapping to `DataSource` that starts at the given address.
